@@ -7,6 +7,7 @@ export const projectRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const fixedFiles = new Set([
   'index.html',
   'styles.css',
+  'effects.css',
   'LICENSE',
   'tools/preview.html',
   'tools/preview.js',

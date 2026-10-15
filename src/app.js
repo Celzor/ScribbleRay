@@ -1,5 +1,6 @@
 import { createBoard } from './board.js';
 import { connectActivity } from './bridge.js';
+import { createCelebrations } from './celebrations.js';
 import { BRUSH_SIZES, PALETTE } from './canvas.js';
 import { MIN_PLAYERS } from './rules.js';
 import { createSession } from './session.js';
@@ -13,7 +14,6 @@ const SAY_GAP_MS = 500;
 const NUDGE_MS = 3500;
 const SAVED_WORDS_KEY = 'scribbleray:custom-words';
 const SOUND_KEY = 'scribbleray:sound';
-const CONFETTI = ['#70e3ff', '#7be0a4', '#ffc56b', '#ff8a9b', '#b79cff', '#ffe066'];
 const ENDINGS = {
   all: () => 'Everyone got it!',
   time: () => 'Time’s up!',
@@ -92,6 +92,10 @@ function avatarFor(person) {
   return node;
 }
 
+const celebrations = createCelebrations({
+  paper: $('paper'), people: $('people'), card: $('overlay-card'), nameOf, rollSeconds: ROLL_SECONDS,
+});
+
 // ---- the session ----
 
 const session = createSession({
@@ -100,7 +104,10 @@ const session = createSession({
     live = next;
     render();
   },
-  onInk: (change) => board?.apply(change),
+  onInk(change) {
+    board?.apply(change);
+    renderCanvasInvitation();
+  },
   onLine(line) {
     if (line === null) renderAllLines();
     else {
@@ -127,6 +134,7 @@ board = createBoard({
 
 function render() {
   const view = live?.view ?? null;
+  const moments = celebrations.observe({ view, connected: !!live?.connected, selfId: me() });
   const current = phase();
   const hosting = !!live?.isHost;
   const drawer = view?.drawer ?? null;
@@ -148,7 +156,7 @@ function render() {
   renderConnection();
   renderHeadline(view);
   renderPeople(view);
-  renderOverlay(view);
+  renderOverlay(view, moments);
   renderLobby(view);
   renderBoardBar(view);
   renderChatMode(view);
@@ -156,6 +164,15 @@ function render() {
   tickClock();
   focusGuess(view);
   restoreSavedWords();
+  renderCanvasInvitation();
+  celebrations.play(moments, { view, selfId: me() });
+}
+
+function renderCanvasInvitation() {
+  const invitation = document.querySelector('.canvas-invitation');
+  if (!invitation) return;
+  invitation.hidden = phase() !== 'board' || !live?.canDraw
+    || session.canvas.ops.some((op) => !session.canvas.removed.has(op.id));
 }
 
 function renderConnection() {
@@ -255,6 +272,7 @@ function renderPeople(view) {
     const host = person.id === live?.hostId;
     const drawing = (current === 'choosing' || current === 'drawing') && view?.drawer === person.id;
     const item = element('li', { className: 'person' });
+    item.dataset.person = String(person.id);
     item.classList.toggle('me', person.id === me());
     item.classList.toggle('drawing', drawing);
     item.classList.toggle('guessed', current === 'drawing' && guessed.has(person.id));
@@ -297,6 +315,7 @@ function tally(entries, view, { drawer = null } = {}) {
   return element('ol', { className: 'tally' }, sorted.map((entry, index) => {
     const label = `${nameOf(entry.id)}${entry.id === drawer ? ' (drew)' : ''}`;
     const item = element('li', {}, [element('span', { text: label }), element('b', { text: `${entry.prefix ?? '+'}${entry.points.toLocaleString()}` })]);
+    item.style.setProperty('--place', index);
     item.classList.toggle('zero', entry.points === 0);
     item.classList.toggle('first', index === 0 && entry.points > 0 && view.phase === 'results');
     return item;
@@ -307,7 +326,7 @@ function countdown(prefix) {
   return element('p', {}, [document.createTextNode(prefix), element('span', { attrs: { 'data-countdown': '' } })]);
 }
 
-function renderOverlay(view) {
+function renderOverlay(view, moments) {
   const current = phase();
   const key = JSON.stringify([current, view?.turn, view?.revision, me(), live?.isHost, live?.participants.length]);
   if (key === overlayKey) return;
@@ -318,20 +337,24 @@ function renderOverlay(view) {
   let celebrating = false;
   if (view && current === 'choosing') {
     if (view.drawer === me()) {
-      parts.push(element('h2', { text: 'Pick a word to draw' }));
+      parts.push(element('p', { className: 'overlay-kicker', text: 'The pen is yours' }), element('h2', { text: 'What’s your masterpiece?' }));
       const choices = element('div', { className: 'choices' });
       view.choices.forEach((word, index) => {
-        const button = element('button', { className: 'button primary', text: word, attrs: { type: 'button' } });
+        const button = element('button', { className: 'button primary', attrs: { type: 'button' } }, [
+          element('span', { className: 'choice-number', attrs: { 'data-choice': String(index + 1), 'aria-hidden': 'true' } }),
+          document.createTextNode(word),
+        ]);
         button.addEventListener('click', () => session.act({ type: 'choose', index }));
         choices.append(button);
       });
       parts.push(choices, countdown('One gets picked for you in '));
     } else {
-      parts.push(element('h2', { text: `${nameOf(view.drawer)} is picking a word` }), element('p', { text: 'Get ready to guess!' }));
+      parts.push(element('p', { className: 'overlay-kicker', text: 'A masterpiece is brewing' }),
+        element('h2', { text: `${nameOf(view.drawer)} is picking a word` }), element('p', { text: 'Sharp eyes. Fast fingers. You’ve got this.' }));
     }
   } else if (view && current === 'reveal' && view.result) {
     const { result } = view;
-    if (result.word) parts.push(element('p', { text: 'The word was' }), element('div', { className: 'big-word', text: result.word }));
+    if (result.word) parts.push(element('p', { className: 'overlay-kicker', text: result.reason === 'all' ? 'A work of art. Everyone got it.' : 'The big reveal' }), element('div', { className: 'big-word', text: result.word }));
     else parts.push(element('h2', { text: 'Turn over' }));
     parts.push(element('p', { text: ENDINGS[result.reason](result.drawer ? nameOf(result.drawer) : null) }));
     if (result.points.length) parts.push(tally(result.points, view, { drawer: result.drawer }));
@@ -341,10 +364,13 @@ function renderOverlay(view) {
     const players = view.players.map((player) => ({ id: player.id, points: player.score, prefix: '' }));
     celebrating = winners.length > 0;
     if (celebrating) parts.push(element('p', { className: 'drumroll', text: winners.length === 1 ? 'And the winner is…' : 'And the winners are…' }));
-    parts.push(element('div', { className: 'trophy', text: '🏆', attrs: { 'aria-hidden': 'true' } }));
+    const trophy = element('div', { className: 'trophy', attrs: { 'aria-hidden': 'true' } });
+    trophy.innerHTML = '<svg viewBox="0 0 100 112" fill="none"><path d="m32 62-9 45 25-13 23 13-5-45" fill="#f45237" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path class="rosette-rays" d="m50 3 9 9 13-3 4 13 13 4-3 13 10 10-10 9 3 13-13 4-4 13-13-3-9 10-10-10-13 3-4-13-13-4 3-13-10-9 10-10-3-13 13-4 4-13 13 3Z" fill="#f6cb49" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><circle cx="49" cy="48" r="25" fill="#fff7dc" stroke="currentColor" stroke-width="2"/><path d="m49 30 5 11 12 2-9 8 2 12-10-6-10 6 2-12-9-8 12-2Z" fill="#f45237" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>';
+    parts.push(trophy);
     if (!winners.length) parts.push(element('h2', { text: 'Game over' }));
     else if (winners.length === 1) parts.push(element('h2', { text: winners[0] === me() ? 'You win!' : `${nameOf(winners[0])} wins!` }));
     else parts.push(element('h2', { text: `It’s a tie between ${winners.map(nameOf).join(' and ')}!` }));
+    if (winners.length) parts.push(element('p', { className: 'result-note', text: 'Certified scribble royalty.' }));
     parts.push(tally(players, view));
     if (live?.isHost) {
       const again = element('button', { className: 'button primary', text: 'Play again', attrs: { type: 'button' } });
@@ -356,33 +382,11 @@ function renderOverlay(view) {
       parts.push(element('p', { text: `Waiting for ${nameOf(live?.hostId)} to play again…` }));
     }
   }
-  // The winner is revealed once, as the game ends. A later redraw of the same results just shows them.
-  const entering = overlay.hidden || overlay.dataset.kind !== current;
+  // Only a live transition earns the fanfare; restored results appear immediately.
   card.replaceChildren(...parts);
-  card.classList.toggle('celebrate', celebrating && entering);
-  if (entering) {
-    overlay.querySelector('.confetti')?.remove();
-    if (celebrating) overlay.append(confetti());
-  }
+  card.classList.toggle('celebrate', celebrating && !!moments?.finale && !document.hidden);
   overlay.dataset.kind = current;
   overlay.hidden = parts.length === 0;
-}
-
-/** Paper confetti, falling as the jingle reveals the winner. */
-function confetti() {
-  const burst = element('div', { className: 'confetti', attrs: { 'aria-hidden': 'true' } });
-  const random = (low, high) => low + Math.random() * (high - low);
-  for (let i = 0; i < 36; i += 1) {
-    const piece = element('i');
-    piece.style.setProperty('--x', `${random(0, 100).toFixed(1)}%`);
-    piece.style.setProperty('--color', CONFETTI[i % CONFETTI.length]);
-    piece.style.setProperty('--delay', `${(ROLL_SECONDS + random(0, 0.6)).toFixed(2)}s`);
-    piece.style.setProperty('--fall', `${random(1.8, 3.2).toFixed(2)}s`);
-    piece.style.setProperty('--drift', `${Math.round(random(-60, 60))}px`);
-    piece.style.setProperty('--spin', `${Math.round(random(360, 1260)) * (i % 2 ? 1 : -1)}deg`);
-    burst.append(piece);
-  }
-  return burst;
 }
 
 function renderLobby(view) {
@@ -399,8 +403,8 @@ function renderLobby(view) {
   $('settings-owner').textContent = hosting ? 'YOU’RE THE HOST' : `${hostName}’s call`;
   if (embedded && live) {
     $('lobby-lead').textContent = hosting
-      ? 'You’re the host. Pick the settings, then start a game or open the whiteboard.'
-      : `${hostName} is hosting. They pick the settings and start things off.`;
+      ? 'Get your people together. Pick the rules. Make a beautiful mess.'
+      : `${hostName} is setting things up. Bring your best bad drawings.`;
   }
 
   const words = live?.customWords ?? [];
@@ -565,6 +569,7 @@ function appendLine(line) {
   const log = $('chat-log');
   const node = lineNode(line);
   if (!node) return;
+  if (!document.hidden) node.classList.add('fresh-line');
   const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
   log.append(node);
   while (log.children.length > 150) log.firstElementChild.remove();
@@ -636,6 +641,9 @@ function selectTool(changes) {
   for (const swatch of $('swatches').children) swatch.setAttribute('aria-checked', String(swatch.dataset.color === tool.color));
   for (const size of $('sizes').children) size.setAttribute('aria-checked', String(Number(size.dataset.size) === tool.size));
   for (const button of document.querySelectorAll('[data-tool]')) button.setAttribute('aria-checked', String(button.dataset.tool === tool.kind));
+  for (const group of $('toolbar').querySelectorAll('[role="radiogroup"]')) {
+    for (const button of group.querySelectorAll('[role="radio"]')) button.tabIndex = button.getAttribute('aria-checked') === 'true' ? 0 : -1;
+  }
 }
 
 for (const color of PALETTE) {
@@ -654,6 +662,22 @@ for (const size of BRUSH_SIZES) {
 }
 for (const button of document.querySelectorAll('[data-tool]')) button.addEventListener('click', () => selectTool({ kind: button.dataset.tool }));
 selectTool({});
+
+// Each tool group is one Tab stop; arrows select within the group.
+for (const group of $('toolbar').querySelectorAll('[role="radiogroup"]')) {
+  group.addEventListener('keydown', (event) => {
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    const direction = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
+    if (!direction && !['Home', 'End'].includes(event.key)) return;
+    const buttons = [...group.querySelectorAll('[role="radio"]')].filter((button) => !button.disabled);
+    const index = buttons.indexOf(event.target);
+    if (index < 0) return;
+    event.preventDefault();
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : (index + direction + buttons.length) % buttons.length;
+    buttons[next].focus();
+    buttons[next].click();
+  });
+}
 
 $('undo').addEventListener('click', () => session.undo());
 // Sandboxed frames can't show confirm(); a second click within a moment confirms instead.
@@ -778,6 +802,7 @@ if (embedded) {
       const key = JSON.stringify([message.sessionId, message.self?.id]);
       if (key !== soundSession) {
         gameSound.reset();
+        celebrations.reset();
         soundSession = key;
       }
       session.init(message);
@@ -815,6 +840,7 @@ window.addEventListener('pagehide', () => {
   clearInterval(retryTimer);
   session.destroy();
   gameSound.destroy();
+  celebrations.destroy();
   bridge?.destroy();
   board.destroy();
 });

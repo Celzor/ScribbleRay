@@ -69,6 +69,8 @@ Guesses ignore case, accents, spaces, and punctuation: “Ice-Cream” matches �
 
 **Drawing tools:** 22 colours, four brush sizes, eraser, bucket fill, undo, and clear. Shortcuts: **B** brush, **E** eraser, **F** fill, **[** / **]** size, **Ctrl+Z** undo. Clear asks for a second click, since Refract’s sandbox has no confirmation dialogs.
 
+**A little celebration.** Fresh turns get a stamped prompt; correct guesses get cut-paper confetti and score pops; the winner gets a rosette reveal timed to the fanfare. Reloads and resyncs do not replay celebrations. Reduced-motion preferences keep the feedback still, and hidden tabs do not accumulate effects. Drawing controls also support **Arrow keys**, **Home**, and **End** within each colour, brush-size, or tool group.
+
 **Host settings** (in the lobby, or between games):
 
 | Setting | Options | What it does |
@@ -127,6 +129,7 @@ This is a cooperative casual-game protocol, not an anti-cheat service: the host�
 | [`src/outbox.js`](src/outbox.js) | Pacing every message under Refract’s rate limit |
 | [`src/board.js`](src/board.js) | The visible sheet: rendering at screen resolution and turning pointer input into strokes |
 | [`src/sound.js`](src/sound.js) | Sound effects: synthesized cues, the closing seconds’ ticks, and mute, without replaying history |
+| [`src/celebrations.js`](src/celebrations.js) | Visual game moments, score pops, and confetti, with reduced-motion support and no replay of restored state |
 | [`src/bridge.js`](src/bridge.js) | Refract postMessage boundary |
 | [`src/app.js`](src/app.js) | UI and wiring |
 | [`tools/preview.html`](tools/preview.html) | Multi-frame Refract protocol simulator |
@@ -149,9 +152,10 @@ An optional browser smoke test plays a full game in the multiplayer preview (wor
 npm install --no-save --package-lock=false playwright
 npx playwright install chromium
 node tools/browser-check.mjs
+node tools/layout-check.mjs
 ```
 
-It accepts `TEST_URL` (defaults to `http://127.0.0.1:4173/`), `PLAYWRIGHT_MODULE` for an existing Playwright installation, and `PLAYWRIGHT_CHROMIUM_EXECUTABLE` for an existing Chromium-based browser such as Edge or Chrome. Screenshots go to the ignored `artifacts/` folder. A protocol simulator verifies the app’s side of the contract; final acceptance uses signed-in users in an actual Refract call.
+Both accept `TEST_URL` (defaults to `http://127.0.0.1:4173/`), `PLAYWRIGHT_MODULE` for an existing Playwright installation, and `PLAYWRIGHT_CHROMIUM_EXECUTABLE` for an existing Chromium-based browser such as Edge or Chrome. Screenshots go to the ignored `artifacts/` folder. The layout check covers desktop, tablet, and phone frames, canvas bounds, keyboard tool selection, and the empty-sheet invitation. A protocol simulator verifies the app’s side of the contract; final acceptance uses signed-in users in an actual Refract call.
 
 ## License
 
