@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <title>ScribbleRay · Local multiplayer preview</title>
+    <link rel="stylesheet" href="./preview.css" />
+    <script type="module" src="./preview.js"></script>
+  </head>
+  <body>
+    <main class="preview">
+      <header class="preview-header">
+        <div>
+          <a class="brand" href="../index.html"><span aria-hidden="true">◈</span> REFRACT / SCRIBBLERAY</a>
+          <p class="eyebrow">LOCAL REFRACT PROTOCOL SIMULATOR</p>
+          <h1>One sheet. Every perspective.</h1>
+          <p class="intro">Alex hosts; Sam and Taylor join. Each view runs the real activity in its own frame, with the same messages, size limit, and rate limit as a Refract call.</p>
+        </div>
+        <div class="session-badge"><span class="status-dot" aria-hidden="true"></span> Local session <span id="session-number">01</span></div>
+      </header>
+
+      <nav class="toolbar" aria-label="Preview controls">
+        <button type="button" id="new-session" class="primary">New session</button>
+        <button type="button" id="toggle-extra" aria-pressed="false">Add Jordan</button>
+        <label class="theme-control">Activity theme
+          <select id="activity-theme"><option value="dark">Dark</option><option value="light">Light</option></select>
+        </label>
+        <span class="stat" id="traffic" aria-live="polite">0 messages relayed · 0 refused</span>
+        <span class="participant-summary" id="participant-summary" aria-live="polite">3 participants</span>
+      </nav>
+
+      <section class="views" id="views" aria-label="Participant views"></section>
+
+      <footer class="preview-footer">
+        <p><strong>Try the lifecycle.</strong> Start a game as Alex, refresh a guesser mid-turn to see the picture come back, add Jordan late, or make Alex leave to watch the next person take over as host.</p>
+        <details>
+          <summary>Protocol activity <span id="event-count">0 events</span></summary>
+          <ol id="event-log" aria-label="Recent protocol events"></ol>
+        </details>
+        <p class="fine-print">This preview simulates Refract’s frame bridge locally, including its 16 KiB message limit and its 20-a-second sending allowance. Real call, account, and socket connectivity still need checking inside your Refract instance.</p>
+      </footer>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,18 @@
+{
+  "name": "scribbleray",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Draw, guess, and doodle together: a Pictionary-style drawing game and shared whiteboard for Refract calls.",
+  "type": "module",
+  "license": "GPL-3.0-only",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "node tools/serve.js",
+    "start": "node tools/serve.js",
+    "build": "node tools/build.js",
+    "test": "node --test",
+    "check": "node tools/check.js"
+  }
+}
