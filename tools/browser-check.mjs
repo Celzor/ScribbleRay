@@ -127,7 +127,11 @@ async function main() {
         await delay(400);
         await page.screenshot({ path: join(artifacts, 'preview-choosing.png') });
       }
-      const word = await drawer.locator('#overlay .choices button').first().textContent();
+      const word = await drawer.locator('#overlay .choices button').first().evaluate((button) => {
+        const label = button.cloneNode(true);
+        for (const decoration of label.querySelectorAll('[aria-hidden="true"]')) decoration.remove();
+        return label.textContent.trim();
+      });
       await drawer.locator('#overlay .choices button').first().click();
       await eventually('the drawer sees the word', async () => (await drawer.locator('#word').textContent()) === word);
       const letters = word.replace(/[^\p{L}\p{N}]/gu, '').length;
@@ -165,7 +169,8 @@ async function main() {
     await playTurn(sam, [alex, taylor]);
     await playTurn(taylor, [alex, sam]);
     await eventually('one round ends the game', async () => (await sam.locator('#overlay .trophy').count()) === 1, 15000);
-    await delay(400);
+    // Capture the winner after the drumroll, while the celebratory confetti is falling.
+    await delay(1900);
     await page.screenshot({ path: join(artifacts, 'preview-results.png') });
     assert.equal(await sam.locator('#overlay .overlay-actions').count(), 0, 'only the host restarts');
     await alex.locator('#overlay button:has-text("Back to lobby")').click();
