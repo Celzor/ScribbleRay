@@ -3,13 +3,17 @@ import { connectActivity } from './bridge.js';
 import { BRUSH_SIZES, PALETTE } from './canvas.js';
 import { MIN_PLAYERS } from './rules.js';
 import { createSession } from './session.js';
+import { ROLL_SECONDS, createGameSound } from './sound.js';
 import { MAX_CUSTOM_WORDS, MAX_WORD_LENGTH, isValidWordList, parseWordList } from './words.js';
 
 const $ = (id) => document.getElementById(id);
 const embedded = window.parent !== window || new URLSearchParams(location.search).get('embedded') === '1';
 const GAME_PHASES = new Set(['choosing', 'drawing', 'reveal']);
 const SAY_GAP_MS = 500;
+const NUDGE_MS = 3500;
 const SAVED_WORDS_KEY = 'scribbleray:custom-words';
+const SOUND_KEY = 'scribbleray:sound';
+const CONFETTI = ['#70e3ff', '#7be0a4', '#ffc56b', '#ff8a9b', '#b79cff', '#ffe066'];
 const ENDINGS = {
   all: () => 'Everyone got it!',
   time: () => 'Time’s up!',
@@ -31,13 +35,24 @@ let lastFocusTurn = null;
 let clearArmed = null;
 let connectionNotice = '';
 let wordsRestored = false;
+let nudgeTimer = null;
+let soundSession = null;
+let soundOn = readSoundPreference();
 let tool = { kind: 'pen', color: PALETTE[0], size: BRUSH_SIZES[1] };
 const avatars = new Map();
+const gameSound = createGameSound({ enabled: soundOn });
 
 document.body.classList.toggle('embedded', embedded);
 $('solo-note').hidden = embedded;
 $('refract-tools').hidden = !embedded;
 $('fullscreen').hidden = !embedded;
+// The sketchbook on its own makes no sounds, so it needs no switch for them.
+$('sound').hidden = !embedded;
+$('overlay').style.setProperty('--reveal', `${ROLL_SECONDS}s`);
+
+function readSoundPreference() {
+  try { return localStorage.getItem(SOUND_KEY) !== 'off'; } catch { return true; }
+}
 
 // ---- small helpers ----
 
@@ -88,7 +103,10 @@ const session = createSession({
   onInk: (change) => board?.apply(change),
   onLine(line) {
     if (line === null) renderAllLines();
-    else appendLine(line);
+    else {
+      appendLine(line);
+      heard(line);
+    }
   },
 });
 
@@ -152,6 +170,8 @@ function renderConnection() {
     connection.dataset.state = 'waiting';
     $('connection-label').textContent = live?.recovering ? 'Taking over' : live ? 'Syncing' : 'Connecting';
   }
+  // Narrow frames show only the dot.
+  connection.title = $('connection-label').textContent;
 }
 
 function letterCounts(hint) {
@@ -292,8 +312,10 @@ function renderOverlay(view) {
   const key = JSON.stringify([current, view?.turn, view?.revision, me(), live?.isHost, live?.participants.length]);
   if (key === overlayKey) return;
   overlayKey = key;
+  const overlay = $('overlay');
   const card = $('overlay-card');
   const parts = [];
+  let celebrating = false;
   if (view && current === 'choosing') {
     if (view.drawer === me()) {
       parts.push(element('h2', { text: 'Pick a word to draw' }));
@@ -317,6 +339,8 @@ function renderOverlay(view) {
   } else if (view && current === 'results') {
     const winners = view.winners.filter((id) => view.players.some((player) => player.id === id));
     const players = view.players.map((player) => ({ id: player.id, points: player.score, prefix: '' }));
+    celebrating = winners.length > 0;
+    if (celebrating) parts.push(element('p', { className: 'drumroll', text: winners.length === 1 ? 'And the winner is…' : 'And the winners are…' }));
     parts.push(element('div', { className: 'trophy', text: '🏆', attrs: { 'aria-hidden': 'true' } }));
     if (!winners.length) parts.push(element('h2', { text: 'Game over' }));
     else if (winners.length === 1) parts.push(element('h2', { text: winners[0] === me() ? 'You win!' : `${nameOf(winners[0])} wins!` }));
@@ -332,9 +356,33 @@ function renderOverlay(view) {
       parts.push(element('p', { text: `Waiting for ${nameOf(live?.hostId)} to play again…` }));
     }
   }
+  // The winner is revealed once, as the game ends. A later redraw of the same results just shows them.
+  const entering = overlay.hidden || overlay.dataset.kind !== current;
   card.replaceChildren(...parts);
-  $('overlay').dataset.kind = current;
-  $('overlay').hidden = parts.length === 0;
+  card.classList.toggle('celebrate', celebrating && entering);
+  if (entering) {
+    overlay.querySelector('.confetti')?.remove();
+    if (celebrating) overlay.append(confetti());
+  }
+  overlay.dataset.kind = current;
+  overlay.hidden = parts.length === 0;
+}
+
+/** Paper confetti, falling as the jingle reveals the winner. */
+function confetti() {
+  const burst = element('div', { className: 'confetti', attrs: { 'aria-hidden': 'true' } });
+  const random = (low, high) => low + Math.random() * (high - low);
+  for (let i = 0; i < 36; i += 1) {
+    const piece = element('i');
+    piece.style.setProperty('--x', `${random(0, 100).toFixed(1)}%`);
+    piece.style.setProperty('--color', CONFETTI[i % CONFETTI.length]);
+    piece.style.setProperty('--delay', `${(ROLL_SECONDS + random(0, 0.6)).toFixed(2)}s`);
+    piece.style.setProperty('--fall', `${random(1.8, 3.2).toFixed(2)}s`);
+    piece.style.setProperty('--drift', `${Math.round(random(-60, 60))}px`);
+    piece.style.setProperty('--spin', `${Math.round(random(360, 1260)) * (i % 2 ? 1 : -1)}deg`);
+    burst.append(piece);
+  }
+  return burst;
 }
 
 function renderLobby(view) {
@@ -413,6 +461,7 @@ function renderChatMode(view) {
     placeholder = view.drawer === me() ? 'Only those who guessed will see this…' : 'Only fellow guessers will see this…';
   }
   form.classList.toggle('guessing', !!guessing);
+  if (!guessing) hideNudge();
   $('chat-mode').textContent = mode;
   input.placeholder = placeholder;
   input.disabled = !live?.connected;
@@ -449,6 +498,8 @@ function tickClock() {
   const fraction = timed && live?.timerDuration ? Math.min(1, remaining / live.timerDuration) : 0;
   bar.style.transform = `scaleX(${fraction})`;
   for (const node of document.querySelectorAll('[data-countdown]')) node.textContent = `${seconds(remaining)} s`;
+  // Every change and every beat of the clock: the closing ticks are booked a moment ahead.
+  if (embedded) gameSound.update({ view: live?.view ?? null, selfId: me(), timerEndsAt: live?.timerEndsAt ?? null });
 }
 
 // ---- chat ----
@@ -524,6 +575,34 @@ function renderAllLines() {
   const log = $('chat-log');
   log.replaceChildren(...session.lines.map(lineNode).filter(Boolean));
   log.scrollTop = log.scrollHeight;
+}
+
+/** A line that just arrived: it may call for a sound, and a near miss for a nudge. */
+function heard(line) {
+  if (embedded) gameSound.heard(line, me());
+  if (line.kind === 'close') showNudge(line.text);
+}
+
+// Only the person who guessed ever receives a 'close' line, so the nudge is theirs alone.
+function showNudge(text) {
+  const nudge = $('nudge');
+  const form = $('chat-form');
+  nudge.replaceChildren(element('strong', { text: 'So close!' }), document.createTextNode(` “${text}” is nearly it.`));
+  // Start the entrance again, even when one near miss follows another.
+  nudge.hidden = true;
+  form.classList.remove('near');
+  void nudge.offsetWidth;
+  nudge.hidden = false;
+  form.classList.add('near');
+  clearTimeout(nudgeTimer);
+  nudgeTimer = setTimeout(hideNudge, NUDGE_MS);
+}
+
+function hideNudge() {
+  clearTimeout(nudgeTimer);
+  nudgeTimer = null;
+  $('nudge').hidden = true;
+  $('chat-form').classList.remove('near');
 }
 
 // Messages leave at most every SAY_GAP_MS, the pace the host accepts, so quick guesses queue rather than vanish.
@@ -673,6 +752,20 @@ $('resync').addEventListener('click', () => {
 $('leave').addEventListener('click', () => bridge?.close());
 $('fullscreen').addEventListener('click', () => bridge?.setFullscreen(!fullscreen));
 
+function renderSound() {
+  $('sound').setAttribute('aria-pressed', String(soundOn));
+  $('sound').title = soundOn ? 'Sound effects on' : 'Sound effects off';
+}
+$('sound').addEventListener('click', () => {
+  soundOn = !soundOn;
+  gameSound.setEnabled(soundOn);
+  try { localStorage.setItem(SOUND_KEY, soundOn ? 'on' : 'off'); } catch { /* Remembering it is a convenience. */ }
+  renderSound();
+  // A soft ding says sound is back, and that this browser can play it.
+  if (soundOn) gameSound.play('guessed');
+});
+renderSound();
+
 // ---- connecting ----
 
 if (embedded) {
@@ -681,6 +774,12 @@ if (embedded) {
       clearTimeout(handshakeTimer);
       connectionNotice = '';
       document.documentElement.dataset.theme = message.theme;
+      // A different session's game is news to nobody here: start its sounds from silence.
+      const key = JSON.stringify([message.sessionId, message.self?.id]);
+      if (key !== soundSession) {
+        gameSound.reset();
+        soundSession = key;
+      }
       session.init(message);
     },
     onParticipants: (people) => session.setParticipants(people),
@@ -696,6 +795,8 @@ if (embedded) {
       render();
     }
   }, 8000);
+  // Refract lets activities play sound, but a browser may still wait for a touch inside the frame.
+  for (const type of ['pointerdown', 'keydown']) document.addEventListener(type, () => gameSound.unlock(), { capture: true, passive: true });
   // Refract keeps no history: a periodic sync recovers anything missed.
   retryTimer = setInterval(() => {
     if (!live?.view) bridge.ready();
@@ -713,6 +814,7 @@ window.addEventListener('pagehide', () => {
   clearTimeout(handshakeTimer);
   clearInterval(retryTimer);
   session.destroy();
+  gameSound.destroy();
   bridge?.destroy();
   board.destroy();
 });

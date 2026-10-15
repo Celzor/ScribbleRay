@@ -58,12 +58,14 @@ Alternatively, run `npm run build` and serve **only `dist/`** from any static HT
 Each round, everyone takes a turn as the drawer. The drawer picks one of a few words (or gets one at random after 15 seconds) and draws it; nobody else sees the word. Everyone else types guesses in the chat:
 
 - **Right:** you score, the chat announces that you got it (never the word itself), and the word appears in your header. Your chat now only reaches the drawer and others who have guessed it, so you can’t give it away.
-- **Close** (one letter off, or two in a long word): only you get a nudge.
+- **Close** (one letter off, or two in a long word): a “So close!” bubble pops up over your guess box, for you alone. Everyone else sees the guess as ordinary chat, never that it was close.
 - **Wrong:** everyone sees it, like normal chat.
 
 Guesses ignore case, accents, spaces, and punctuation: “Ice-Cream” matches “ice cream”. A turn ends when everyone has guessed or time runs out; the word is revealed with the points for that turn, and the next drawer starts six seconds later. Players who join mid-game get a turn in the current round.
 
 **Scoring.** A correct guess earns 50 to 350 points: more the faster you guess, plus a bonus for the first five to get it. The drawer earns the guessers’ average, counting anyone who missed as zero, so a drawing that everyone gets quickly is worth the most.
+
+**Sound.** Short, quiet effects follow the game: a chime when it’s your turn to draw, a flourish when you guess the word (and a softer ding when someone else does), a private nudge for a near miss, a clock ticking through the last ten seconds, a falling tone when time runs out, and a drum roll and fanfare as the winner is revealed. They are synthesized in the browser, so there is nothing to download. The speaker button at the top mutes them, and each browser remembers its choice. Sound plays only while the activity is on screen, and never catches up on what happened while it was muted or hidden.
 
 **Drawing tools:** 22 colours, four brush sizes, eraser, bucket fill, undo, and clear. Shortcuts: **B** brush, **E** eraser, **F** fill, **[** / **]** size, **Ctrl+Z** undo. Clear asks for a second click, since Refract’s sandbox has no confirmation dialogs.
 
@@ -80,7 +82,7 @@ Guesses ignore case, accents, spaces, and punctuation: “Ice-Cream” matches �
 | Words | Built-in · Built-in + custom · Custom only | The built-in list has over 400 drawable words. |
 | Custom words | Up to 400 words, each up to 32 characters | One per line, or separated by commas. Duplicates are dropped. The host’s browser remembers its last list for next time. |
 
-During a game, the host can **skip a turn** (say, for someone who stepped away) or **end the game**. When it ends, the winner is announced with the final scores; the host can play again with the same settings or go back to the lobby.
+During a game, the host can **skip a turn** (say, for someone who stepped away) or **end the game**. When it ends, a drum roll and confetti reveal the winner with the final scores; the host can play again with the same settings or go back to the lobby.
 
 ### Whiteboard
 
@@ -124,10 +126,11 @@ This is a cooperative casual-game protocol, not an anti-cheat service: the host�
 | [`src/session.js`](src/session.js) | Refract session: host authority, per-player views, guess routing, live drawing, catch-up, recovery, and storage |
 | [`src/outbox.js`](src/outbox.js) | Pacing every message under Refract’s rate limit |
 | [`src/board.js`](src/board.js) | The visible sheet: rendering at screen resolution and turning pointer input into strokes |
+| [`src/sound.js`](src/sound.js) | Sound effects: synthesized cues, the closing seconds’ ticks, and mute, without replaying history |
 | [`src/bridge.js`](src/bridge.js) | Refract postMessage boundary |
 | [`src/app.js`](src/app.js) | UI and wiring |
 | [`tools/preview.html`](tools/preview.html) | Multi-frame Refract protocol simulator |
-| [`tests/`](tests/) | Rules (including randomized whole games), words, drawing, pacing, synchronization over a simulated relay, bridge, page markup, and static-serving checks |
+| [`tests/`](tests/) | Rules (including randomized whole games), words, drawing, pacing, synchronization over a simulated relay, sound cues, bridge, page markup, and static-serving checks |
 
 ## Development checks
 

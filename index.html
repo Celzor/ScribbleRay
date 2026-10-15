@@ -21,6 +21,9 @@
       <div class="topbar-tools">
         <span id="timer" class="timer" hidden><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="9" r="5.5"/><path d="M8 6.5V9l1.6 1.2M6.5 1.8h3"/></svg><span id="timer-text">0:00</span></span>
         <span id="connection" class="connection" data-state="local"><span class="dot"></span><span id="connection-label">Sketching solo</span></span>
+        <button id="sound" class="icon-button sound-toggle" type="button" aria-pressed="true" aria-label="Sound effects" title="Sound effects on" hidden>
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 6.2h2.3L8 3.5v9L4.8 9.8H2.5Z"/><path class="sound-waves" d="M10.4 6.1a2.7 2.7 0 0 1 0 3.8M12.3 4.3a5.3 5.3 0 0 1 0 7.4"/><path class="sound-muted" d="m10.6 6.3 3.4 3.4m0-3.4-3.4 3.4"/></svg>
+        </button>
         <button id="fullscreen" class="icon-button" type="button" aria-pressed="false" aria-label="Full screen" title="Full screen (F11)" hidden>
           <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg>
         </button>
@@ -133,6 +136,7 @@
         <div class="panel-head"><h2 id="chat-title">Chat</h2><span id="chat-mode" class="tag">LOBBY</span></div>
         <ol id="chat-log" class="chat-log scroll" aria-live="polite" aria-relevant="additions"></ol>
         <form id="chat-form" class="chat-form" autocomplete="off">
+          <p id="nudge" class="nudge" aria-hidden="true" hidden></p>
           <input id="chat-input" class="input" name="message" maxlength="100" enterkeyhint="send" placeholder="Say something…" aria-label="Chat or guess">
           <button id="chat-send" class="button primary" type="submit" aria-label="Send">↵</button>
         </form>
